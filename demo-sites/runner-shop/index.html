@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="accessai-demo" content="runner-shop">
+<meta property="og:site_name" content="Runner Shop">
+<title>Black Runner | Runner Shop</title>
+<style>
+  :root { --ink:#111; --muted:#666; --line:#eee; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 "Inter", system-ui, sans-serif; color:var(--ink); background:#fff; }
+  .promo { background:#111; color:#fff; text-align:center; font-size:12px; padding:8px; }
+  header { display:flex; justify-content:space-between; align-items:center; padding:16px 32px; border-bottom:1px solid var(--line); }
+  .logo { font-weight:800; font-size:18px; color:inherit; text-decoration:none; }
+  nav a { color:var(--ink); text-decoration:none; margin-left:24px; font-size:14px; }
+  main { display:grid; grid-template-columns: 1fr 1fr; gap:48px; padding:32px; max-width:1100px; }
+  .photo { border:1px solid var(--line); border-radius:12px; padding:16px; background:#fafafa; position:relative; }
+  .photo span { font-size:12px; color:#999; }
+  .photo img { width:100%; height:auto; display:block; }
+  .crumbs { font-size:12px; color:var(--muted); }
+  h1 { font-size:32px; margin:4px 0; }
+  .stars { color:#f5a623; font-size:13px; } .stars span { color:var(--muted); }
+  .price { font-size:24px; font-weight:800; margin:8px 0; }
+  .desc { color:#444; max-width:30rem; }
+  label { display:block; font-size:13px; font-weight:600; margin:16px 0 6px; }
+  select { font:inherit; padding:8px 12px; border:1px solid #ccc; border-radius:8px; min-width:180px; }
+  .buttons { display:flex; gap:12px; margin-top:18px; }
+  button { font:inherit; font-weight:700; border-radius:999px; padding:12px 22px; border:0; cursor:pointer; }
+  .primary { background:#111; color:#fff; } .secondary { background:#eee; color:#111; }
+  #cart-status { margin-top:16px; font-size:14px; color:#444; }
+  .error { color:#b42318; font-size:13px; }
+  .details { grid-column: 1 / -1; border-top:1px solid var(--line); padding-top:16px; color:#444; font-size:14px; }
+  /* A deliberately bad checkout page (to show AccessAI stopping). */
+  #checkout { display:none; grid-column:1/-1; border:1px solid var(--line); border-radius:12px; padding:20px; max-width:28rem; }
+  #checkout.open { display:block; }
+  #checkout input { font:inherit; padding:8px; width:100%; border:1px solid #ccc; border-radius:8px; }
+</style>
+</head>
+<body>
+<div class="promo">Free delivery on orders over $100</div>
+<header>
+  <a class="logo" href="./">Runner Shop</a>
+  <nav aria-label="Main"><a href="#">Men</a><a href="#">Women</a><a href="#">Trail</a><a href="#">Sale</a></nav>
+</header>
+<main>
+  <div class="photo">
+    <span aria-hidden="true">Black Runner, side view</span>
+    <!-- No alt text on purpose: the prototype shows AccessAI describing it. -->
+    <img src="shoe.svg" width="400" height="260">
+  </div>
+  <div>
+    <p class="crumbs">Men › Road running</p>
+    <h1>Black Runner</h1>
+    <p class="stars">★★★★★ <span>4.6 (212 reviews)</span></p>
+    <p class="price">$129</p>
+    <p class="desc">A light, cushioned road shoe for everyday runs. Breathable mesh upper, responsive foam sole and a reflective heel for early mornings.</p>
+    <label for="size">Size</label>
+    <select id="size">
+      <option value="">Choose a size</option>
+      <option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option>
+    </select>
+    <p id="size-error" class="error" role="alert"></p>
+    <div class="buttons">
+      <button class="primary" id="add">Add to cart</button>
+      <button class="secondary" id="checkout-btn">Checkout and pay</button>
+    </div>
+    <p id="cart-status" role="status">Your cart is empty</p>
+  </div>
+  <section class="details" aria-labelledby="delivery-h">
+    <h2 id="delivery-h">Delivery and returns</h2>
+    <p>Free delivery on orders over $100. Arrives in 2 to 4 business days.</p>
+    <p>Return unworn shoes within 30 days for a full refund.</p>
+    <p>Sizes 7 to 12, men's Australian sizing.</p>
+  </section>
+  <section id="checkout" aria-labelledby="pay-h">
+    <h2 id="pay-h">Payment</h2>
+    <label for="cc">Card number</label><input id="cc" autocomplete="cc-number" inputmode="numeric">
+    <label for="cvv">Security code (CVV)</label><input id="cvv" autocomplete="cc-csc" inputmode="numeric">
+    <div class="buttons"><button class="primary" id="place">Place order</button></div>
+  </section>
+</main>
+<script>
+  const size = document.getElementById('size');
+  const status = document.getElementById('cart-status');
+  const err = document.getElementById('size-error');
+  document.getElementById('add').addEventListener('click', () => {
+    if (!size.value) { err.textContent = 'Please choose a size first.'; return; }
+    err.textContent = '';
+    status.textContent = `In your cart: Black Runner, size ${size.value}`;
+  });
+  document.getElementById('checkout-btn').addEventListener('click', () => {
+    document.getElementById('checkout').classList.add('open');
+    document.getElementById('cc').focus();
+  });
+  document.getElementById('place').addEventListener('click', () => { status.textContent = 'Demo only. No order was placed.'; });
+</script>
+</body>
+</html>

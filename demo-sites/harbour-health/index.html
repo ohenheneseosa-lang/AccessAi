@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="accessai-demo" content="harbour-health">
+<meta name="accessai-demo-speech" content="scripted">
+<meta property="og:site_name" content="Harbour Health">
+<title>Welcome | Harbour Health</title>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui, sans-serif; color:#13252b; background:#f3f8f8; }
+  header { background:#0f5257; color:#fff; padding:14px 32px; font-weight:700; }
+  main { max-width:860px; padding:24px 32px; }
+  h1 { font-size:28px; margin:8px 0 2px; }
+  .lead { margin:0 0 16px; color:#3b5258; font-size:14px; }
+  .player { position:relative; aspect-ratio: 16 / 9; background:linear-gradient(160deg,#0f5257,#1b6f73); border-radius:10px; overflow:hidden; }
+  .badge { position:absolute; top:12px; right:12px; background:#0b1d20; color:#fff; font-size:11px; padding:3px 8px; border-radius:4px; }
+  .person { position:absolute; left:50%; top:46%; transform:translate(-50%,-50%); width:180px; height:200px; }
+  .head { width:90px; height:90px; border-radius:50%; background:#f1c7a1; margin:0 auto; position:relative; z-index:1; }
+  .body { width:170px; height:170px; border-radius:50%; background:#f5f5f2; margin:-30px auto 0; }
+  .speaking .head { animation: talk .35s infinite alternate; }
+  @keyframes talk { to { transform: translateY(-2px) scale(1.02); } }
+  @media (prefers-reduced-motion: reduce) { .speaking .head { animation:none; } }
+  .controls { position:absolute; left:0; right:0; bottom:0; display:flex; align-items:center; gap:12px; padding:8px 12px; background:rgba(0,0,0,.55); color:#fff; font-size:12px; }
+  .controls button { background:none; border:0; color:#fff; font:inherit; font-weight:700; cursor:pointer; min-height:32px; }
+  .bar { flex:1; height:4px; background:#ffffff55; border-radius:2px; }
+  .bar i { display:block; height:100%; width:0; background:#fff; border-radius:2px; }
+  section { margin-top:24px; }
+  li { margin:4px 0; }
+</style>
+</head>
+<body>
+<header>Harbour Health · People team</header>
+<main>
+  <h1>Welcome to the team</h1>
+  <p class="lead">Start here: a short welcome from our Chief Executive, then your first-week checklist.</p>
+  <div class="player" id="player" role="region" aria-label="Welcome video from the Chief Executive">
+    <span class="badge">No captions available</span>
+    <div class="person" aria-hidden="true"><div class="head"></div><div class="body"></div></div>
+    <div class="controls">
+      <button id="play" aria-label="Play video">▶ Play</button>
+      <span id="time">0:00</span>
+      <div class="bar" aria-hidden="true"><i id="progress"></i></div>
+      <span>0:27</span>
+    </div>
+  </div>
+  <section aria-labelledby="check-h">
+    <h2 id="check-h">Your first-week checklist</h2>
+    <ul>
+      <li>Collect your staff ID card from reception.</li>
+      <li>Set up your email and rostering app.</li>
+      <li>Complete the online induction module.</li>
+      <li>Book a coffee with your buddy.</li>
+    </ul>
+  </section>
+</main>
+<script>
+  // The video's speech, as a script. On this demo site the "video" is
+  // animated and spoken by the browser. It also tells AccessAI what is being
+  // said, so captions can be demonstrated without a speech service.
+  const SPEECH = [
+    { at: 0, text: "Hi, and welcome to Harbour Health. We're so glad you're joining the team." },
+    { at: 4500, text: "Your first week is all about settling in and meeting the people you'll work with." },
+    { at: 9500, text: 'Your start date is Monday the 2nd of December, at 9 am.' },
+    { at: 13500, text: 'Please come to the Level 3 reception, and bring photo ID and your bank details.' },
+    { at: 18500, text: 'Your buddy is Priya from the patient care team.', confidence: 0.62 },
+    { at: 22500, text: 'Before Friday, please complete the online induction module. See you soon!' },
+  ];
+  const LENGTH = 27000;
+  const btn = document.getElementById('play');
+  const player = document.getElementById('player');
+  let timers = [], startedAt = 0, tick;
+  function stop() {
+    timers.forEach(clearTimeout); timers = []; clearInterval(tick);
+    player.classList.remove('speaking'); btn.textContent = '▶ Play'; btn.setAttribute('aria-label', 'Play video');
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+  }
+  btn.addEventListener('click', () => {
+    if (timers.length) return stop();
+    startedAt = Date.now();
+    player.classList.add('speaking'); btn.textContent = '❚❚ Pause'; btn.setAttribute('aria-label', 'Pause video');
+    for (const line of SPEECH) timers.push(setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('accessai:demo-speech', { detail: { text: line.text, confidence: line.confidence ?? 0.95 } }));
+      if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(line.text); u.lang = 'en-AU'; speechSynthesis.speak(u); }
+    }, line.at));
+    timers.push(setTimeout(() => { window.dispatchEvent(new Event('accessai:demo-speech-ended')); stop(); }, LENGTH));
+    tick = setInterval(() => {
+      const t = Math.min(LENGTH, Date.now() - startedAt);
+      document.getElementById('time').textContent = `0:${String(Math.floor(t / 1000)).padStart(2, '0')}`;
+      document.getElementById('progress').style.width = `${(t / LENGTH) * 100}%`;
+    }, 250);
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "accessai",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AccessAI: an AI assistant that helps Blind, low-vision, Deaf and hard-of-hearing people shop and read the web on their own terms.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "npm run build -w @accessai/extension",
+    "dev:api": "npm run dev -w @accessai/api",
+    "demo-sites": "node scripts/serve-demo-sites.mjs",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/api && tsc -p packages/extension",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test --trace off"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.1",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

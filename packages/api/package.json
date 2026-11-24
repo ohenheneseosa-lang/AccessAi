@@ -1,0 +1,4 @@
+{ "name": "@accessai/api", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": { "dev": "tsx watch src/server.ts", "start": "tsx src/server.ts" },
+  "dependencies": { "@accessai/shared": "0.1.0", "@anthropic-ai/sdk": "^1.14.0", "fastify": "^5.6.0", "zod": "^3.25.0" },
+  "devDependencies": { "tsx": "^4.20.0" } }

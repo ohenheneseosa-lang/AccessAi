@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <title>Allow the microphone · AccessAI</title>
+    <style>
+      body { font: 18px/1.5 system-ui, sans-serif; max-width: 34rem; margin: 3rem auto; padding: 0 1rem; color: #111; }
+      button { font: inherit; font-weight: 700; min-height: 48px; padding: 0 1.5rem; border-radius: 999px; border: 0; background: #2f4bf5; color: #fff; }
+      :focus-visible { outline: 3px solid #2f4bf5; outline-offset: 3px; }
+      @media (prefers-color-scheme: dark) { body { background: #0e0e11; color: #f4f4f6; } }
+    </style>
+  </head>
+  <body>
+    <h1>Allow the microphone</h1>
+    <p>AccessAI uses your microphone only when you start captions or press Talk. Audio is turned into text on your device by your browser.</p>
+    <button id="allow" autofocus>Allow the microphone</button>
+    <p id="result" role="status"></p>
+    <script src="permission.js"></script>
+  </body>
+</html>
