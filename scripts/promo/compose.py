@@ -1,6 +1,9 @@
 """Turns the captured AccessAI screenshots into a captioned 1080p promo video.
 
 Usage: python3 compose.py <capture_dir> <out.mp4>
+
+If <capture_dir> has clip-<name>.mp4 (8s clips made in Google Flow), each persona opens with
+that clip and a title overlay, and stills from the clips replace the stock photos.
 """
 import json
 import subprocess
@@ -29,7 +32,40 @@ PEOPLE = {
     "mia": {"face": (718, 600, 560), "focus": (700, 1150)},
     "grace": {"face": (860, 300, 460), "focus": (900, 466)},
 }
-PHOTOS = {n: Image.open(src / f"photo-{n}.jpg").convert("RGB") for n in PEOPLE}
+# Same idea for stills grabbed from the Flow clips (1280x720, frame at 2s).
+CLIP_PEOPLE = {
+    "sam": {"face": (760, 118, 270), "focus": (700, 360)},
+    "mia": {"face": (560, 215, 300), "focus": (560, 360)},
+    "grace": {"face": (705, 265, 300), "focus": (820, 360)},
+}
+
+
+
+def kenburns(name):
+    """Builds an 8s clip from two stills (kb-<name>-1.png, kb-<name>-2.png) with a slow push-in
+    and a crossfade, for when a Flow clip can't be downloaded but stills can be captured."""
+    a, b, clip = src / f"kb-{name}-1.png", src / f"kb-{name}-2.png", src / f"clip-{name}.mp4"
+    zp = "scale=2560:1440,zoompan=z='1+0.0008*on':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=135:s=1280x720:fps=30"
+    subprocess.run([
+        "ffmpeg", "-v", "error", "-y", "-loop", "1", "-t", "4.5", "-i", str(a), "-loop", "1", "-t", "4.5", "-i", str(b),
+        "-filter_complex", f"[0:v]{zp}[x];[1:v]{zp}[y];[x][y]xfade=transition=fade:duration=1:offset=3.5,format=yuv420p[v]",
+        "-map", "[v]", "-t", "8", "-c:v", "libx264", "-crf", "18", str(clip),
+    ], check=True)
+
+
+for _n in PEOPLE:
+    if not (src / f"clip-{_n}.mp4").exists() and (src / f"kb-{_n}-1.png").exists():
+        kenburns(_n)
+CLIPS = {n: src / f"clip-{n}.mp4" for n in PEOPLE if (src / f"clip-{n}.mp4").exists()}
+PHOTOS = {}
+for n in PEOPLE:
+    if n in CLIPS:
+        still = src / f"still-{n}.jpg"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "2", "-i", str(CLIPS[n]), "-frames:v", "1", str(still)], check=True)
+        PHOTOS[n] = Image.open(still).convert("RGB")
+        PEOPLE[n] = CLIP_PEOPLE[n]
+    else:
+        PHOTOS[n] = Image.open(src / f"photo-{n}.jpg").convert("RGB")
 
 
 def cover(name, w, h):
@@ -123,7 +159,29 @@ def card(item):
     total = len(tl) * (tf.size + 20) + 40 + len(sl) * (sf.size + 16)
     y = (H - total) / 2 - (230 if big else 0)
     y = centred(d, tl, tf, y, WHITE, 20) + 40
-    centred(d, sl, sf, y, YELLOW, 16)
+    y = centred(d, sl, sf, y, YELLOW, 16)
+    if item.get("cta"):
+        centred(d, [item["cta"]], font(FONT_BOLD, 56), y + 20, WHITE, 0)
+    if item.get("small"):
+        smf = font(FONT_SEMI, 30)
+        centred(d, [item["small"]], smf, H - 48, (200, 205, 220), 0)
+    return im
+
+
+def title_overlay(item):
+    """Transparent 1080p overlay: dark band at the bottom with the persona title."""
+    im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    band = Image.new("L", (W, H), 0)
+    bd = ImageDraw.Draw(band)
+    for y in range(560, H):
+        bd.line([(0, y), (W, y)], fill=min(235, int(235 * (y - 560) / 220)))
+    im.paste(Image.new("RGBA", (W, H), (*NAVY, 255)), (0, 0), band)
+    d = ImageDraw.Draw(im)
+    tf, sf = font(FONT_BOLD, 96), font(FONT_SEMI, 48)
+    sl = wrap(d, item["sub"], sf, 1500)
+    y = H - 70 - len(sl) * (sf.size + 12) - 30 - tf.size
+    d.text((90, y), item["title"], font=tf, fill=WHITE)
+    left_text(d, sl, sf, 90, y + tf.size + 30, YELLOW, 12)
     return im
 
 
@@ -162,30 +220,69 @@ def shot(item, who):
 segments = []
 who = "sam"
 for i, item in enumerate(shots):
+    p = frames / f"{i:02d}.png"
     if item["kind"] == "card":
         who = item.get("who") or who
+        if item.get("who") in CLIPS:
+            title_overlay(item).save(p)
+            segments.append((p, 8.0, CLIPS[who]))
+            continue
         im = card(item)
     else:
         im = shot(item, who)
-    p = frames / f"{i:02d}.png"
     im.save(p)
-    segments.append((p, item["seconds"]))
+    segments.append((p, item["seconds"], None))
 
-inputs, filters = [], []
-for i, (p, secs) in enumerate(segments):
-    inputs += ["-loop", "1", "-t", str(secs), "-framerate", "30", "-i", str(p)]
-    filters.append(
-        f"[{i}:v]scale={W}:{H},format=yuv420p,fade=t=in:st=0:d=0.35,fade=t=out:st={secs - 0.35}:d=0.35[v{i}]"
-    )
+inputs, filters, idx = [], [], 0
+for i, (p, secs, clip) in enumerate(segments):
+    fade = f"fade=t=in:st=0:d=0.35,fade=t=out:st={secs - 0.35}:d=0.35"
+    if clip:
+        # Flow clip (its own audio is dropped) with the title fading in over it after 1.5s.
+        inputs += ["-t", str(secs), "-i", str(clip), "-loop", "1", "-t", str(secs), "-framerate", "30", "-i", str(p)]
+        filters.append(
+            f"[{idx}:v]scale={W}:{H},fps=30,setsar=1[c{i}];"
+            f"[{idx + 1}:v]format=rgba,fade=t=in:st=1.5:d=0.6:alpha=1[t{i}];"
+            f"[c{i}][t{i}]overlay=0:0,format=yuv420p,{fade}[v{i}]"
+        )
+        idx += 2
+    else:
+        inputs += ["-loop", "1", "-t", str(secs), "-framerate", "30", "-i", str(p)]
+        filters.append(f"[{idx}:v]scale={W}:{H},setsar=1,format=yuv420p,{fade}[v{i}]")
+        idx += 1
 concat = "".join(f"[v{i}]" for i in range(len(segments))) + f"concat=n={len(segments)}:v=1:a=0[v]"
-total = sum(s for _, s in segments)
+total = sum(s for _, s, _ in segments)
 cmd = [
     "ffmpeg", "-y", *inputs,
     "-f", "lavfi", "-t", str(total), "-i", "anullsrc=r=48000:cl=stereo",
     "-filter_complex", ";".join(filters) + ";" + concat,
-    "-map", "[v]", "-map", f"{len(segments)}:a",
+    "-map", "[v]", "-map", f"{idx}:a",
     "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-shortest", "-movflags", "+faststart", str(out),
 ]
 subprocess.run(cmd, check=True, capture_output=True)
 print(f"wrote {out} ({total:.1f}s, {len(segments)} segments)")
+
+
+def ts(t):
+    ms = int(round(t * 1000))
+    return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+
+
+# Captions file with every line of on-screen text, for players that show closed captions.
+cues, t = [], 0.0
+for item, (_, secs, _) in zip(shots, segments):
+    text = item.get("caption") or "\n".join(x for x in (item.get("title"), item.get("sub"), item.get("cta"), item.get("small")) if x)
+    cues.append(f"{len(cues) + 1}\n{ts(t + 0.2)} --> {ts(t + secs - 0.2)}\n{text}\n")
+    t += secs
+out.with_suffix(".srt").write_text("\n".join(cues))
+
+# The main version gets the soundtrack; the silent render is kept as the no-music version.
+silent = out.with_name(out.stem + "-no-music.mp4")
+out.replace(silent)
+wav = src / "music.wav"
+subprocess.run([sys.executable, str(Path(__file__).with_name("music.py")), str(total), str(wav)], check=True)
+subprocess.run([
+    "ffmpeg", "-v", "error", "-y", "-i", str(silent), "-i", str(wav), "-map", "0:v", "-map", "1:a",
+    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(out),
+], check=True)
+print(f"wrote {out}, {silent.name} and {out.with_suffix('.srt').name}")

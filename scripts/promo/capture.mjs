@@ -57,6 +57,9 @@ async function shot(site, panel, caption, seconds = 4) {
 }
 const card = (title, sub, seconds = 3.5, who) => shots.push({ kind: 'card', title, sub, seconds, who });
 
+card('The web wasn’t built for everyone.', 'Tiny grey text. Photos with no description. Videos with no captions.', 4.5);
+card('Meet AccessAI.', 'It sits beside any website, and works for you.', 4);
+
 // ---- Sam: Blind, uses a screen reader ----
 card('Sam is Blind.', 'He uses AccessAI by voice, with a screen reader. Today he’s buying running shoes.', 4.5, 'sam');
 {
@@ -131,7 +134,8 @@ card('Grace has low vision.', 'She’s reading about the Seniors Card. The text 
   await site.close(); await panel.close();
 }
 
-card('AccessAI', 'The web, on your terms.', 5);
+card('Why you can trust it', 'Answers come from the page. Press Escape to stop it any time. It asks how you like to use it, never about your diagnosis.', 5.5);
+shots.push({ kind: 'card', title: 'AccessAI', sub: 'The web, on your terms.', cta: 'Free to start. Join the beta.', small: 'Demo with sample AI responses. Fictional websites.', seconds: 6 });
 writeFileSync(`${OUT}shots.json`, JSON.stringify(shots, null, 2));
 await ctx.close();
 console.log(`captured ${n} shots to ${OUT}`);
