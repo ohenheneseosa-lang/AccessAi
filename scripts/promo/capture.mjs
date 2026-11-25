@@ -55,14 +55,14 @@ async function shot(site, panel, caption, seconds = 4) {
   await panel.screenshot({ path: p });
   shots.push({ kind: 'shot', site: s, panel: p, caption, seconds });
 }
-const card = (title, sub, seconds = 3.5) => shots.push({ kind: 'card', title, sub, seconds });
+const card = (title, sub, seconds = 3.5, who) => shots.push({ kind: 'card', title, sub, seconds, who });
 
 // ---- Sam: Blind, uses a screen reader ----
-card('Sam is Blind.', 'He uses a screen reader. Today he’s buying running shoes.');
+card('Sam is Blind.', 'He uses AccessAI by voice, with a screen reader. Today he’s buying running shoes.', 4.5, 'sam');
 {
   const { site, panel } = await open('/runner-shop/', { ...BASE, name: 'Sam', uses: { ...BASE.uses, screenReader: true }, readAloud: true });
   await panel.getByRole('heading', { name: 'Hi Sam,' }).waitFor();
-  await shot(site, panel, 'AccessAI sits beside any website. Sam talks to it in plain words.');
+  await shot(site, panel, 'AccessAI sits beside any website. Sam asks out loud, and it answers out loud.');
   await panel.getByRole('button', { name: 'Summarise this page' }).click();
   await panel.getByText(/^This is Runner Shop, an online store/).first().waitFor();
   await shot(site, panel, '“What’s on this page?” AccessAI sums it up and reads it aloud.', 4.5);
@@ -82,7 +82,7 @@ card('Sam is Blind.', 'He uses a screen reader. Today he’s buying running shoe
 }
 
 // ---- Mia: Deaf ----
-card('Mia is Deaf.', 'It’s her first day, and her welcome video has no captions.');
+card('Mia is Deaf.', 'It’s her first day, and her welcome video has no captions.', 4, 'mia');
 {
   const { site, panel } = await open('/harbour-health/', { ...BASE, name: 'Mia', uses: { ...BASE.uses, captions: true }, defaultTab: 'captions' });
   await panel.getByRole('button', { name: 'Start captions' }).waitFor();
@@ -105,7 +105,7 @@ card('Mia is Deaf.', 'It’s her first day, and her welcome video has no caption
 }
 
 // ---- Grace: low vision ----
-card('Grace has low vision.', 'She’s reading about the Seniors Card. The text is tiny and pale.');
+card('Grace has low vision.', 'She’s reading about the Seniors Card. The text is tiny and pale.', 4, 'grace');
 {
   const { site, panel, tabId } = await open('/seniors-card/', { ...BASE, name: 'Grace' });
   tabZoom = () => sw.evaluate((id) => chrome.tabs.getZoom(id), tabId);
@@ -131,7 +131,7 @@ card('Grace has low vision.', 'She’s reading about the Seniors Card. The text 
   await site.close(); await panel.close();
 }
 
-card('AccessAI', 'The web, on your terms.', 4);
+card('AccessAI', 'The web, on your terms.', 5);
 writeFileSync(`${OUT}shots.json`, JSON.stringify(shots, null, 2));
 await ctx.close();
 console.log(`captured ${n} shots to ${OUT}`);

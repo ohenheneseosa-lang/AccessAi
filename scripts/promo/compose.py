@@ -21,6 +21,19 @@ out = Path(sys.argv[2])
 frames = src / "frames"
 frames.mkdir(exist_ok=True)
 shots = json.loads((src / "shots.json").read_text())
+CHARS = {n: Image.open(src / f"char-{n}.png").convert("RGBA") for n in ("sam", "mia", "grace")}
+
+
+def avatar(name, size):
+    """Round head-and-shoulders crop of a character."""
+    im = CHARS[name].crop((150, 150, 750, 750)).resize((size, size), Image.LANCZOS)
+    bg = Image.new("RGBA", (size, size), (*NAVY, 255))
+    bg.alpha_composite(im)
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).ellipse([0, 0, size - 1, size - 1], fill=255)
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    out.paste(bg, (0, 0), mask)
+    return out
 
 
 def font(path, size):
@@ -49,22 +62,46 @@ def centred(draw, lines, f, top, fill, gap):
     return y
 
 
+def left_text(draw, lines, f, x, top, fill, gap):
+    y = top
+    for ln in lines:
+        draw.text((x, y), ln, font=f, fill=fill)
+        y += f.size + gap
+    return y
+
+
 def card(item):
     im = Image.new("RGB", (W, H), NAVY)
     d = ImageDraw.Draw(im)
+    who = item.get("who")
+    if who:
+        ch = CHARS[who].resize((1000, 1000), Image.LANCZOS)
+        im.paste(ch, (-60, H - 1000 + 40), ch)
+        tf, sf = font(FONT_BOLD, 110), font(FONT_SEMI, 52)
+        tl = wrap(d, item["title"], tf, 900)
+        sl = wrap(d, item["sub"], sf, 900)
+        total = len(tl) * (tf.size + 16) + 40 + len(sl) * (sf.size + 14)
+        y = (H - total) / 2
+        y = left_text(d, tl, tf, 940, y, WHITE, 16) + 40
+        left_text(d, sl, sf, 940, y, YELLOW, 14)
+        return im
     big = item["title"] == "AccessAI"
+    if big:
+        for i, n in enumerate(("sam", "mia", "grace")):
+            ch = CHARS[n].resize((560, 560), Image.LANCZOS)
+            im.paste(ch, (100 + i * 580, H - 520), ch)
     tf = font(FONT_BOLD, 200 if big else 120)
     sf = font(FONT_SEMI, 64 if big else 52)
     tl = wrap(d, item["title"], tf, 1600)
     sl = wrap(d, item["sub"], sf, 1500)
     total = len(tl) * (tf.size + 20) + 40 + len(sl) * (sf.size + 16)
-    y = (H - total) / 2
+    y = (H - total) / 2 - (230 if big else 0)
     y = centred(d, tl, tf, y, WHITE, 20) + 40
     centred(d, sl, sf, y, YELLOW, 16)
     return im
 
 
-def shot(item):
+def shot(item, who):
     im = Image.new("RGB", (W, H), NAVY)
     d = ImageDraw.Draw(im)
     site = Image.open(item["site"]).convert("RGB")
@@ -86,16 +123,24 @@ def shot(item):
     # Caption bar: large, high-contrast text.
     bar_top = y0 + area_h + 20
     d.rectangle([0, bar_top, W, H], fill=(0, 0, 0))
-    cf = font(FONT_BOLD, 50)
-    lines = wrap(d, item["caption"], cf, W - 160)
+    av = avatar(who, H - bar_top - 30)
+    im.paste(av, (40, bar_top + 15), av)
+    cf = font(FONT_BOLD, 48)
+    tx = 40 + av.width + 40
+    lines = wrap(d, item["caption"], cf, W - tx - 60)
     total = len(lines) * (cf.size + 10)
-    centred(d, lines, cf, bar_top + (H - bar_top - total) / 2, WHITE, 10)
+    left_text(d, lines, cf, tx, bar_top + (H - bar_top - total) / 2 - 6, WHITE, 10)
     return im
 
 
 segments = []
+who = "sam"
 for i, item in enumerate(shots):
-    im = card(item) if item["kind"] == "card" else shot(item)
+    if item["kind"] == "card":
+        who = item.get("who") or who
+        im = card(item)
+    else:
+        im = shot(item, who)
     p = frames / f"{i:02d}.png"
     im.save(p)
     segments.append((p, item["seconds"]))
