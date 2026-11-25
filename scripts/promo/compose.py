@@ -21,14 +21,33 @@ out = Path(sys.argv[2])
 frames = src / "frames"
 frames.mkdir(exist_ok=True)
 shots = json.loads((src / "shots.json").read_text())
-CHARS = {n: Image.open(src / f"char-{n}.png").convert("RGBA") for n in ("sam", "mia", "grace")}
+# Real photos of people (free Pexels licence, see CREDITS.md). fetch-photos.sh saves them as
+# photo-<name>.jpg. face = (centre x, centre y, box size) for the round avatar; focus = the
+# point the card crop keeps in view. Coordinates are for the 1400px-wide downloads.
+PEOPLE = {
+    "sam": {"face": (528, 470, 420), "focus": (560, 1150)},
+    "mia": {"face": (718, 600, 560), "focus": (700, 1150)},
+    "grace": {"face": (860, 300, 460), "focus": (900, 466)},
+}
+PHOTOS = {n: Image.open(src / f"photo-{n}.jpg").convert("RGB") for n in PEOPLE}
+
+
+def cover(name, w, h):
+    """Crop a photo to fill w x h, keeping the person's focus point in view."""
+    im = PHOTOS[name]
+    scale = max(w / im.width, h / im.height)
+    cw, ch = w / scale, h / scale
+    fx, fy = PEOPLE[name]["focus"]
+    x = min(max(fx - cw / 2, 0), im.width - cw)
+    y = min(max(fy - ch / 2, 0), im.height - ch)
+    return im.crop((int(x), int(y), int(x + cw), int(y + ch))).resize((w, h), Image.LANCZOS)
 
 
 def avatar(name, size):
-    """Round head-and-shoulders crop of a character."""
-    im = CHARS[name].crop((150, 150, 750, 750)).resize((size, size), Image.LANCZOS)
-    bg = Image.new("RGBA", (size, size), (*NAVY, 255))
-    bg.alpha_composite(im)
+    """Round head-and-shoulders crop of the person."""
+    cx, cy, s = PEOPLE[name]["face"]
+    im = PHOTOS[name].crop((cx - s // 2, cy - s // 2, cx + s // 2, cy + s // 2)).resize((size, size), Image.LANCZOS)
+    bg = im.convert("RGBA")
     mask = Image.new("L", (size, size), 0)
     ImageDraw.Draw(mask).ellipse([0, 0, size - 1, size - 1], fill=255)
     out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
@@ -75,8 +94,13 @@ def card(item):
     d = ImageDraw.Draw(im)
     who = item.get("who")
     if who:
-        ch = CHARS[who].resize((1000, 1000), Image.LANCZOS)
-        im.paste(ch, (-60, H - 1000 + 40), ch)
+        pw = 880
+        im.paste(cover(who, pw, H), (0, 0))
+        # Soft fade from the photo into the navy text side.
+        fade = Image.new("L", (160, H))
+        for x in range(160):
+            ImageDraw.Draw(fade).line([(x, 0), (x, H)], fill=int(255 * x / 159))
+        im.paste(Image.new("RGB", (160, H), NAVY), (pw - 160, 0), fade)
         tf, sf = font(FONT_BOLD, 110), font(FONT_SEMI, 52)
         tl = wrap(d, item["title"], tf, 900)
         sl = wrap(d, item["sub"], sf, 900)
@@ -88,8 +112,10 @@ def card(item):
     big = item["title"] == "AccessAI"
     if big:
         for i, n in enumerate(("sam", "mia", "grace")):
-            ch = CHARS[n].resize((560, 560), Image.LANCZOS)
-            im.paste(ch, (100 + i * 580, H - 520), ch)
+            ph = cover(n, 520, 420)
+            mask = Image.new("L", ph.size, 0)
+            ImageDraw.Draw(mask).rounded_rectangle([0, 0, 519, 419], 28, fill=255)
+            im.paste(ph, (150 + i * 560, H - 480), mask)
     tf = font(FONT_BOLD, 200 if big else 120)
     sf = font(FONT_SEMI, 64 if big else 52)
     tl = wrap(d, item["title"], tf, 1600)
