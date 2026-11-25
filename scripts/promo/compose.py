@@ -233,6 +233,32 @@ for i, item in enumerate(shots):
     im.save(p)
     segments.append((p, item["seconds"], None))
 
+
+
+def duration(path):
+    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+                       capture_output=True, text=True, check=True)
+    return float(r.stdout.strip())
+
+
+# Voice-over: optional vo/vo-NN.(aiff|wav|mp3), one line per segment. A segment is stretched so its
+# line fits with a short pause after it.
+VO = {}
+for i in range(len(segments)):
+    for ext in ("aiff", "wav", "mp3", "m4a"):
+        f = src / "vo" / f"vo-{i:02d}.{ext}"
+        if f.exists():
+            VO[i] = (f, duration(f))
+            break
+for i, (f, d) in VO.items():
+    p_, secs, clip = segments[i]
+    need = round(d + 0.9, 2)
+    if need > secs:
+        if clip:
+            print(f"note: line {i:02d} is {d:.1f}s, longer than its clip")
+        else:
+            segments[i] = (p_, need, clip)
+
 inputs, filters, idx = [], [], 0
 for i, (p, secs, clip) in enumerate(segments):
     fade = f"fade=t=in:st=0:d=0.35,fade=t=out:st={secs - 0.35}:d=0.35"
@@ -281,8 +307,36 @@ silent = out.with_name(out.stem + "-no-music.mp4")
 out.replace(silent)
 wav = src / "music.wav"
 subprocess.run([sys.executable, str(Path(__file__).with_name("music.py")), str(total), str(wav)], check=True)
+if VO:
+    # Each line starts 0.4s into its segment. The music dips under the voice (sidechain ducking).
+    starts, t = [], 0.0
+    for _, secs, _ in segments:
+        starts.append(t)
+        t += secs
+    vin, vf = [], []
+    for k, (i, (f, _)) in enumerate(sorted(VO.items())):
+        vin += ["-i", str(f)]
+        ms = int((starts[i] + 0.4) * 1000)
+        vf.append(f"[{k + 2}:a]aresample=48000,aformat=channel_layouts=stereo,adelay={ms}|{ms},volume=1.6[l{k}]")
+    n = len(VO)
+    graph = ";".join(vf) + ";" + "".join(f"[l{k}]" for k in range(n)) + f"amix=inputs={n}:normalize=0,apad[vo];"
+    graph += "[vo]asplit[vo1][vo2];[1:a]aresample=48000,volume=0.8[mu];"
+    graph += "[mu][vo1]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=400[duck];"
+    graph += f"[duck][vo2]amix=inputs=2:normalize=0,atrim=0:{total},alimiter=limit=0.9[a]"
+    audio = ["-i", str(wav), *vin, "-filter_complex", graph, "-map", "0:v", "-map", "[a]"]
+else:
+    audio = ["-i", str(wav), "-map", "0:v", "-map", "1:a"]
 subprocess.run([
-    "ffmpeg", "-v", "error", "-y", "-i", str(silent), "-i", str(wav), "-map", "0:v", "-map", "1:a",
+    "ffmpeg", "-v", "error", "-y", "-i", str(silent), *audio,
     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(out),
 ], check=True)
+if VO:
+    # No-music version keeps the voice-over.
+    vo_only = ";".join(vf) + ";" + "".join(f"[l{k}]" for k in range(n)) + f"amix=inputs={n}:normalize=0,apad,atrim=0:{total}[a]"
+    tmp = silent.with_name(silent.stem + "-tmp.mp4")
+    subprocess.run([
+        "ffmpeg", "-v", "error", "-y", "-i", str(silent), "-i", str(wav), *vin, "-filter_complex", vo_only,
+        "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp),
+    ], check=True)
+    tmp.replace(silent)
 print(f"wrote {out}, {silent.name} and {out.with_suffix('.srt').name}")
